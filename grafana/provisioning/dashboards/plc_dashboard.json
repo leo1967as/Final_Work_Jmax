@@ -1,0 +1,196 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "PLC Holding Registers — High-Speed Modbus Logger",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Register Value",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 3,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["last", "min", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+          "query": "from(bucket: \"plc_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_registers\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "refId": "A"
+        }
+      ],
+      "title": "PLC Holding Registers (All 5)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30000 },
+              { "color": "red", "value": 60000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 12 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+          "query": "from(bucket: \"plc_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_registers\" and r[\"_field\"] == \"register_210\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Register 0 (Latest)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 60000 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 12 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+          "query": "from(bucket: \"plc_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_registers\" and r[\"_field\"] == \"register_211\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Register 1 (Latest)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 60000 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 8, "y": 12 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+          "query": "from(bucket: \"plc_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_registers\" and r[\"_field\"] == \"register_212\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Register 2 (Latest)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 60000 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 12, "y": 12 },
+      "id": 5,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+          "query": "from(bucket: \"plc_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_registers\" and r[\"_field\"] == \"register_213\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Register 3 (Latest)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 60000 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 4, "x": 16, "y": 12 },
+      "id": 6,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "influxdb-provisioned" },
+          "query": "from(bucket: \"plc_data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"plc_registers\" and r[\"_field\"] == \"register_214\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Register 4 (Latest)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "tags": ["plc", "modbus", "iot"],
+  "templating": { "list": [] },
+  "time": { "from": "now-5m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "PLC Modbus Dashboard",
+  "uid": "plc-modbus-001",
+  "version": 1
+}

@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PLC Sensor Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+    darkMode: "class",
+    theme: {
+        extend: {
+            colors: {
+                "primary": "#1337ec",
+                "bg-light": "#f0f2ff",
+                "bg-dark": "#101322",
+            },
+            fontFamily: { "display": ["Inter", "sans-serif"] },
+            borderRadius: { "DEFAULT":"0.5rem","lg":"0.5rem","xl":"0.75rem","full":"9999px" },
+        },
+    },
+}
+</script>
+<style>
+.glass-card{background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.2)}
+.bg-grad{background:linear-gradient(135deg,#1337ec 0%,#3b82f6 50%,#818cf8 100%)}
+.sensor-card{transition:all .25s ease}
+.sensor-card:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(19,55,236,.15)}
+.tab-active{color:#fff;border-bottom:2px solid #fff;font-weight:700}
+.tab-inactive{color:rgba(255,255,255,.6)}
+.tab-inactive:hover{color:rgba(255,255,255,.9)}
+.rec-pulse{animation:pulse-rec 1.5s infinite}
+@keyframes pulse-rec{0%,100%{opacity:1}50%{opacity:.4}}
+.toast{animation:slideIn .3s ease}
+@keyframes slideIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+</style>
+</head>
+
+<body class="font-display bg-bg-light min-h-screen">
+<div class="bg-grad min-h-screen w-full flex flex-col">
+
+<!-- ═══ HEADER ═══ -->
+<header class="w-full px-6 py-4 flex items-center justify-between border-b border-white/10 bg-white/10 backdrop-blur-md sticky top-0 z-50">
+  <div class="flex items-center gap-3 text-white">
+    <div class="size-9 bg-white/20 rounded-lg flex items-center justify-center">
+      <span class="material-symbols-outlined text-white">memory</span>
+    </div>
+    <h2 class="text-lg font-bold tracking-tight">PLC <span class="text-blue-200">Sensor</span> Dashboard</h2>
+  </div>
+  <nav class="flex items-center gap-8">
+    <button onclick="switchTab('monitor')" id="tab-monitor" class="tab-active text-sm py-1 transition-colors border-b-2 border-transparent">Monitor</button>
+    <button onclick="switchTab('files')"   id="tab-files"   class="tab-inactive text-sm py-1 transition-colors border-b-2 border-transparent">File Management</button>
+  </nav>
+  <div class="flex items-center gap-3">
+    <div id="conn-badge" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold text-white">
+      <span class="size-2 rounded-full bg-emerald-400"></span> CONNECTED
+    </div>
+    <div id="rec-badge" class="hidden flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/80 text-xs font-bold text-white rec-pulse">
+      <span class="size-2 rounded-full bg-white"></span> RECORDING
+    </div>
+  </div>
+</header>
+
+<!-- ═══ TOAST ═══ -->
+<div id="toast-container" class="fixed top-20 right-6 z-[200] space-y-2"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: MONITOR                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<main id="page-monitor" class="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6">
+
+  <!-- Sensor Cards -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="sensor-grid">
+    {% set colors = ['#3b82f6','#f43f5e','#06b6d4','#f59e0b','#8b5cf6'] %}
+    {% for s in sensors %}
+    {% set c = colors[loop.index0 % 5] %}
+    <div class="sensor-card glass-card rounded-xl p-5 border-t-4 cursor-pointer select-none"
+         style="border-top-color: {{ c }}"
+         onclick="openSensorModal('{{ s.id }}','{{ s.name }}','{{ s.unit }}','{{ c }}')">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">{{ s.name }}</span>
+        <span class="material-symbols-outlined text-xl" style="color:{{ c }}">{{ s.icon }}</span>
+      </div>
+      <div class="flex items-baseline gap-1">
+        <span class="text-3xl font-black text-slate-800" id="val-{{ s.id }}">--</span>
+        <span class="text-sm font-medium text-slate-400">{{ s.unit }}</span>
+      </div>
+      <div class="mt-2 text-xs font-medium text-slate-400" id="time-{{ s.id }}">waiting...</div>
+      <div class="mt-3 flex items-center gap-1 text-xs font-medium" style="color:{{ c }}">
+        <span class="material-symbols-outlined" style="font-size:14px">open_in_full</span>
+        <span>View graph</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Recording Controls -->
+  <div class="glass-card rounded-xl p-6 shadow-lg">
+    <div class="flex flex-col md:flex-row md:items-center gap-4">
+      <div class="flex-1">
+        <h3 class="text-lg font-bold text-slate-800">Data Recording</h3>
+        <p class="text-sm text-slate-500 mt-0.5">Record sensor data to CSV. Name your session before starting.</p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <input id="rec-name" type="text" placeholder="Recording name..."
+               class="px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-primary focus:border-primary w-56"/>
+        <button onclick="startRec()" id="btn-start-rec"
+                class="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-500/20">
+          <span class="material-symbols-outlined text-sm">play_arrow</span> Start Recording
+        </button>
+        <button onclick="stopRec()" id="btn-stop-rec"
+                class="hidden flex items-center gap-2 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-lg transition-colors shadow-lg shadow-rose-500/20">
+          <span class="material-symbols-outlined text-sm">stop</span> Stop
+        </button>
+      </div>
+    </div>
+    <div id="rec-info" class="hidden mt-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700 font-medium"></div>
+  </div>
+
+  <!-- Live Chart -->
+  <div class="glass-card rounded-xl p-6 shadow-lg">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-bold text-slate-800">Live Telemetry</h3>
+      <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+        <button onclick="setChartRange(1)"  class="chart-range-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors text-slate-500 hover:text-slate-700">1m</button>
+        <button onclick="setChartRange(5)"  class="chart-range-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors bg-primary text-white">5m</button>
+        <button onclick="setChartRange(15)" class="chart-range-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors text-slate-500 hover:text-slate-700">15m</button>
+      </div>
+    </div>
+    <div class="relative h-72">
+      <canvas id="liveChart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- TAB: FILE MANAGEMENT                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<main id="page-files" class="hidden flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6">
+
+  <!-- Header -->
+  <div class="space-y-2">
+    <h1 class="text-3xl font-black text-white tracking-tight">File Management</h1>
+    <p class="text-white/80 text-lg">Manage recorded CSV data logs. Download, preview, rename, or delete files.</p>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="flex flex-col md:flex-row gap-4 items-center justify-between glass-card p-4 rounded-xl shadow-lg">
+    <div class="relative w-full md:w-96">
+      <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+      <input id="file-search" oninput="filterFiles()" type="text"
+             class="w-full pl-10 pr-4 py-2 bg-slate-50 border-slate-200 rounded-lg focus:ring-primary focus:border-primary text-slate-800 placeholder:text-slate-400"
+             placeholder="Search log files..."/>
+    </div>
+    <button onclick="loadFiles()" class="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-colors">
+      <span class="material-symbols-outlined text-sm">refresh</span> Refresh
+    </button>
+  </div>
+
+  <!-- File Table -->
+  <div class="glass-card rounded-xl shadow-2xl overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50 border-b border-slate-100">
+            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">File Name</th>
+            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Date Created</th>
+            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Size</th>
+            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="file-tbody" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+    <!-- Empty state -->
+    <div id="file-empty" class="hidden flex flex-col items-center justify-center p-16 text-center space-y-4">
+      <div class="size-20 bg-primary/10 rounded-full flex items-center justify-center mb-2">
+        <span class="material-symbols-outlined text-primary text-4xl">folder_off</span>
+      </div>
+      <h3 class="text-xl font-bold text-slate-800">No recordings found</h3>
+      <p class="text-slate-500 max-w-xs mx-auto">Start a recording session on the Monitor tab to see files here.</p>
+    </div>
+    <!-- Footer -->
+    <div id="file-footer" class="px-6 py-4 bg-slate-50 border-t border-slate-100">
+      <p class="text-sm text-slate-500 font-medium" id="file-count">0 files</p>
+    </div>
+  </div>
+</main>
+
+<!-- ═══ SENSOR DETAIL MODAL ═══ -->
+<div id="sensor-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+  <div class="glass-card w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
+      <div class="flex items-center gap-3">
+        <div id="sensor-modal-dot" class="size-3 rounded-full"></div>
+        <h3 class="text-lg font-bold text-slate-800" id="sensor-modal-title">Sensor</h3>
+        <span class="text-sm text-slate-400" id="sensor-modal-val"></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+          <button onclick="setSensorRange(1)"  class="srange-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors text-slate-500 hover:text-slate-700">1m</button>
+          <button onclick="setSensorRange(5)"  class="srange-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors bg-primary text-white">5m</button>
+          <button onclick="setSensorRange(15)" class="srange-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors text-slate-500 hover:text-slate-700">15m</button>
+          <button onclick="setSensorRange(60)" class="srange-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors text-slate-500 hover:text-slate-700">1h</button>
+        </div>
+        <button onclick="closeSensorModal()" class="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+    <!-- Chart -->
+    <div class="p-6">
+      <div class="relative h-80">
+        <canvas id="sensorDetailChart"></canvas>
+      </div>
+    </div>
+    <!-- Stats row -->
+    <div class="px-6 pb-6 grid grid-cols-3 gap-4">
+      <div class="bg-slate-50 rounded-xl p-4 text-center">
+        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Min</div>
+        <div class="text-2xl font-black text-slate-700" id="stat-min">--</div>
+      </div>
+      <div class="bg-slate-50 rounded-xl p-4 text-center">
+        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Max</div>
+        <div class="text-2xl font-black text-slate-700" id="stat-max">--</div>
+      </div>
+      <div class="bg-slate-50 rounded-xl p-4 text-center">
+        <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Avg</div>
+        <div class="text-2xl font-black text-slate-700" id="stat-avg">--</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CSV PREVIEW MODAL ═══ -->
+<div id="preview-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+  <div class="glass-card w-full max-w-5xl max-h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
+      <div class="flex items-center gap-3">
+        <span class="material-symbols-outlined text-primary">table_view</span>
+        <h3 class="text-lg font-bold text-slate-800" id="preview-title">CSV Preview</h3>
+      </div>
+      <button onclick="closePreview()" class="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="flex-1 overflow-auto p-0">
+      <table class="w-full text-left border-collapse">
+        <thead class="sticky top-0 z-10" id="preview-thead"></thead>
+        <tbody class="divide-y divide-slate-100 bg-white" id="preview-tbody"></tbody>
+      </table>
+    </div>
+    <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+      <button onclick="closePreview()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg transition-colors">Close Preview</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RENAME MODAL ═══ -->
+<div id="rename-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+  <div class="glass-card w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+    <h3 class="text-lg font-bold text-slate-800">Rename File</h3>
+    <input id="rename-input" type="text" class="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-primary focus:border-primary"/>
+    <div class="flex justify-end gap-3">
+      <button onclick="closeRename()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg">Cancel</button>
+      <button onclick="confirmRename()" class="px-4 py-2 bg-primary hover:opacity-90 text-white font-semibold rounded-lg">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="mt-auto w-full p-6 text-center">
+  <p class="text-white/60 text-sm font-medium">PLC Data Logger Dashboard &bull; Modbus TCP &bull; InfluxDB</p>
+</footer>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+/* ── State ── */
+let chartMinutes = 5;
+let liveChart = null;
+let sensorDetailChart = null;
+let sensorModalId = null;
+let sensorModalColor = null;
+let sensorModalUnit = '';
+let sensorModalMinutes = 5;
+let sensorModalTimer = null;
+let allFiles = [];
+let renameTarget = null;
+const COLORS = ['#3b82f6','#f43f5e','#06b6d4','#f59e0b','#8b5cf6'];
+
+/* ── Tab switching ── */
+function switchTab(tab) {
+    document.getElementById('page-monitor').classList.toggle('hidden', tab !== 'monitor');
+    document.getElementById('page-files').classList.toggle('hidden', tab !== 'files');
+    document.getElementById('tab-monitor').className = tab === 'monitor' ? 'tab-active text-sm py-1 transition-colors border-b-2' : 'tab-inactive text-sm py-1 transition-colors border-b-2 border-transparent';
+    document.getElementById('tab-files').className   = tab === 'files'   ? 'tab-active text-sm py-1 transition-colors border-b-2' : 'tab-inactive text-sm py-1 transition-colors border-b-2 border-transparent';
+    if (tab === 'files') loadFiles();
+}
+
+/* ── Toast ── */
+function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    const colors = type === 'success' ? 'bg-emerald-500' : type === 'error' ? 'bg-rose-500' : 'bg-blue-500';
+    el.className = `toast ${colors} text-white px-5 py-3 rounded-xl shadow-xl text-sm font-semibold`;
+    el.textContent = msg;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+}
+
+/* ── Sensors ── */
+async function fetchSensors() {
+    try {
+        const r = await fetch('/api/sensors');
+        const d = await r.json();
+        if (!d.ok) return;
+        for (const s of d.sensors) {
+            const v = d.values[s.id];
+            const el = document.getElementById('val-' + s.id);
+            const tel = document.getElementById('time-' + s.id);
+            if (el) el.textContent = v ? v.value : '--';
+            if (tel) tel.textContent = v ? new Date(v.time).toLocaleTimeString() : 'no data';
+        }
+    } catch(e) {}
+}
+
+/* ── Chart ── */
+function initChart() {
+    const ctx = document.getElementById('liveChart').getContext('2d');
+    liveChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: [] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 300 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 20, font: { family: 'Inter', weight: '600', size: 11 } } }
+            },
+            scales: {
+                x: { type: 'time', time: { unit: 'second' }, grid: { display: false }, ticks: { font: { family: 'Inter', size: 10 } } },
+                y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { family: 'Inter', size: 10 } } }
+            }
+        }
+    });
+}
+
+async function fetchChart() {
+    try {
+        const r = await fetch(`/api/history?minutes=${chartMinutes}`);
+        const d = await r.json();
+        if (!d.ok || !liveChart) return;
+        const sensors = {{ sensors | tojson }};
+        const datasets = [];
+        sensors.forEach((s, i) => {
+            const series = d.series[s.id] || [];
+            datasets.push({
+                label: s.name,
+                data: series.map(p => ({ x: new Date(p.t), y: p.v })),
+                borderColor: COLORS[i % COLORS.length],
+                backgroundColor: COLORS[i % COLORS.length] + '20',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.3,
+                fill: true,
+            });
+        });
+        liveChart.data.datasets = datasets;
+        liveChart.update('none');
+    } catch(e) {}
+}
+
+function setChartRange(m) {
+    chartMinutes = m;
+    document.querySelectorAll('.chart-range-btn').forEach(b => {
+        b.className = 'chart-range-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors ' +
+            (parseInt(b.textContent) === m ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-700');
+    });
+    fetchChart();
+}
+
+/* ── Sensor Detail Modal ── */
+function openSensorModal(id, name, unit, color) {
+    sensorModalId = id;
+    sensorModalColor = color;
+    sensorModalUnit = unit;
+    sensorModalMinutes = 5;
+    document.getElementById('sensor-modal-title').textContent = name;
+    document.getElementById('sensor-modal-dot').style.background = color;
+    document.getElementById('sensor-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    // sync range buttons
+    document.querySelectorAll('.srange-btn').forEach(b => {
+        const m = parseInt(b.textContent);
+        b.className = 'srange-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors ' +
+            (m === 5 ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-700');
+    });
+    loadSensorDetail();
+    sensorModalTimer = setInterval(loadSensorDetail, 5000);
+}
+
+function closeSensorModal() {
+    document.getElementById('sensor-modal').classList.add('hidden');
+    document.body.style.overflow = '';
+    clearInterval(sensorModalTimer);
+    if (sensorDetailChart) { sensorDetailChart.destroy(); sensorDetailChart = null; }
+}
+
+function setSensorRange(m) {
+    sensorModalMinutes = m;
+    document.querySelectorAll('.srange-btn').forEach(b => {
+        const bm = b.textContent === '1h' ? 60 : parseInt(b.textContent);
+        b.className = 'srange-btn px-3 py-1 text-xs font-semibold rounded-md transition-colors ' +
+            (bm === m ? 'bg-primary text-white' : 'text-slate-500 hover:text-slate-700');
+    });
+    loadSensorDetail();
+}
+
+async function loadSensorDetail() {
+    if (!sensorModalId) return;
+    try {
+        const r = await fetch(`/api/history?minutes=${sensorModalMinutes}`);
+        const d = await r.json();
+        if (!d.ok) return;
+        const series = (d.series[sensorModalId] || []);
+        const data = series.map(p => ({ x: new Date(p.t), y: p.v }));
+
+        // Stats
+        const vals = data.map(p => p.y).filter(v => v !== null);
+        if (vals.length) {
+            const mn = Math.min(...vals), mx = Math.max(...vals);
+            const av = vals.reduce((a,b) => a+b, 0) / vals.length;
+            document.getElementById('stat-min').textContent = mn.toFixed(1);
+            document.getElementById('stat-max').textContent = mx.toFixed(1);
+            document.getElementById('stat-avg').textContent = av.toFixed(1);
+        } else {
+            ['stat-min','stat-max','stat-avg'].forEach(id => document.getElementById(id).textContent = '--');
+        }
+
+        // Latest value in header
+        const latest = vals.length ? vals[vals.length - 1].toFixed(1) : '--';
+        document.getElementById('sensor-modal-val').textContent = latest + (sensorModalUnit ? ' ' + sensorModalUnit : '');
+
+        // Chart
+        const ctx = document.getElementById('sensorDetailChart').getContext('2d');
+        if (sensorDetailChart) {
+            sensorDetailChart.data.datasets[0].data = data;
+            sensorDetailChart.update('none');
+        } else {
+            sensorDetailChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: document.getElementById('sensor-modal-title').textContent,
+                        data,
+                        borderColor: sensorModalColor,
+                        backgroundColor: sensorModalColor + '18',
+                        borderWidth: 2.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: true,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 200 },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => `${ctx.parsed.y.toFixed(2)}${sensorModalUnit ? ' ' + sensorModalUnit : ''}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { type: 'time', time: { unit: 'second' }, grid: { display: false }, ticks: { font: { family: 'Inter', size: 10 } } },
+                        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { family: 'Inter', size: 10 } } }
+                    }
+                }
+            });
+        }
+    } catch(e) {}
+}
+
+/* ── Recording ── */
+async function fetchRecStatus() {
+    try {
+        const r = await fetch('/api/recording/status');
+        const d = await r.json();
+        const active = d.active;
+        document.getElementById('rec-badge').classList.toggle('hidden', !active);
+        document.getElementById('btn-start-rec').classList.toggle('hidden', active);
+        document.getElementById('btn-stop-rec').classList.toggle('hidden', !active);
+        document.getElementById('rec-name').disabled = active;
+        const info = document.getElementById('rec-info');
+        if (active) {
+            info.classList.remove('hidden');
+            const dur = Math.round((Date.now() - new Date(d.started_at).getTime()) / 1000);
+            const mm = Math.floor(dur / 60);
+            const ss = dur % 60;
+            info.innerHTML = `<span class="material-symbols-outlined text-sm align-middle mr-1">fiber_manual_record</span>Recording "<strong>${d.name}</strong>" in progress — ${mm}m ${ss}s`;
+        } else {
+            info.classList.add('hidden');
+        }
+    } catch(e) {}
+}
+
+async function startRec() {
+    const name = document.getElementById('rec-name').value.trim();
+    if (!name) { toast('Please enter a recording name', 'error'); return; }
+    try {
+        const r = await fetch('/api/recording/start', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ name })
+        });
+        const d = await r.json();
+        if (d.ok) { toast(d.message); fetchRecStatus(); }
+        else toast(d.error, 'error');
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+async function stopRec() {
+    try {
+        const r = await fetch('/api/recording/stop', { method: 'POST' });
+        const d = await r.json();
+        if (d.ok) { toast(d.message); fetchRecStatus(); document.getElementById('rec-name').value = ''; }
+        else toast(d.error, 'error');
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+/* ── File Management ── */
+async function loadFiles() {
+    try {
+        const r = await fetch('/api/files');
+        const d = await r.json();
+        allFiles = d.ok ? d.files : [];
+        renderFiles(allFiles);
+    } catch(e) { allFiles = []; renderFiles([]); }
+}
+
+function filterFiles() {
+    const q = document.getElementById('file-search').value.toLowerCase();
+    renderFiles(allFiles.filter(f => f.name.toLowerCase().includes(q)));
+}
+
+function renderFiles(files) {
+    const tbody = document.getElementById('file-tbody');
+    const empty = document.getElementById('file-empty');
+    const count = document.getElementById('file-count');
+    count.textContent = `${files.length} file${files.length !== 1 ? 's' : ''}`;
+    if (!files.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    tbody.innerHTML = files.map(f => `
+        <tr class="hover:bg-slate-50/50 transition-colors group">
+            <td class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                    <div class="size-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-blue-500">description</span>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-slate-800">${f.name}</div>
+                        <div class="text-xs text-slate-400">CSV Log File</div>
+                    </div>
+                </div>
+            </td>
+            <td class="px-6 py-4 text-sm text-slate-600">${f.created}</td>
+            <td class="px-6 py-4 text-sm text-slate-600">${f.size}</td>
+            <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-1">
+                    <button onclick="previewFile('${f.name}')" class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Preview">
+                        <span class="material-symbols-outlined">visibility</span>
+                    </button>
+                    <button onclick="window.location.href='/api/files/${f.name}/download'" class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Download">
+                        <span class="material-symbols-outlined">download</span>
+                    </button>
+                    <button onclick="openRename('${f.name}')" class="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors" title="Rename">
+                        <span class="material-symbols-outlined">edit</span>
+                    </button>
+                    <button onclick="deleteFile('${f.name}')" class="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Delete">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function deleteFile(name) {
+    if (!confirm(`Delete "${name}"?`)) return;
+    try {
+        const r = await fetch(`/api/files/${name}/delete`, { method: 'DELETE' });
+        const d = await r.json();
+        if (d.ok) { toast('File deleted'); loadFiles(); }
+        else toast(d.error, 'error');
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+/* ── Preview ── */
+async function previewFile(name) {
+    try {
+        const r = await fetch(`/api/files/${name}/preview`);
+        const d = await r.json();
+        if (!d.ok) { toast(d.error, 'error'); return; }
+        document.getElementById('preview-title').textContent = `CSV Preview: ${name}`;
+        document.getElementById('preview-thead').innerHTML = `<tr class="bg-slate-50 border-b border-slate-200">${d.headers.map(h => `<th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">${h}</th>`).join('')}</tr>`;
+        document.getElementById('preview-tbody').innerHTML = d.rows.map(row =>
+            `<tr class="hover:bg-slate-50 transition-colors">${d.headers.map(h => `<td class="px-6 py-3 text-sm text-slate-600 font-mono whitespace-nowrap">${row[h] ?? ''}</td>`).join('')}</tr>`
+        ).join('');
+        document.getElementById('preview-modal').classList.remove('hidden');
+    } catch(e) { toast('Preview failed', 'error'); }
+}
+function closePreview() { document.getElementById('preview-modal').classList.add('hidden'); }
+
+/* ── Rename ── */
+function openRename(name) {
+    renameTarget = name;
+    document.getElementById('rename-input').value = name;
+    document.getElementById('rename-modal').classList.remove('hidden');
+}
+function closeRename() { document.getElementById('rename-modal').classList.add('hidden'); renameTarget = null; }
+async function confirmRename() {
+    const newName = document.getElementById('rename-input').value.trim();
+    if (!newName || !renameTarget) return;
+    try {
+        const r = await fetch(`/api/files/${renameTarget}/rename`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ new_name: newName })
+        });
+        const d = await r.json();
+        if (d.ok) { toast(`Renamed to ${d.new_name}`); closeRename(); loadFiles(); }
+        else toast(d.error, 'error');
+    } catch(e) { toast('Network error', 'error'); }
+}
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+    initChart();
+    fetchSensors();
+    fetchChart();
+    fetchRecStatus();
+    setInterval(fetchSensors, 2000);
+    setInterval(fetchChart, 5000);
+    setInterval(fetchRecStatus, 2000);
+});
+</script>
+</body>
+</html>

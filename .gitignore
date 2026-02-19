@@ -1,0 +1,22 @@
+# Environment & Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Docker volumes (local data)
+influxdb-data/
+grafana-data/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
