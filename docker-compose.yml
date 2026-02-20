@@ -22,15 +22,17 @@ services:
       - "8086:8086"
     volumes:
       - influxdb-data:/var/lib/influxdb2
+      - ./scripts/init-influxdb.sh:/docker-entrypoint-initdb.d/init-influxdb.sh:ro
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=${DOCKER_INFLUXDB_INIT_MODE}
-      - DOCKER_INFLUXDB_INIT_USERNAME=${DOCKER_INFLUXDB_INIT_USERNAME}
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD}
-      - DOCKER_INFLUXDB_INIT_ORG=${DOCKER_INFLUXDB_INIT_ORG}
-      - DOCKER_INFLUXDB_INIT_BUCKET=${DOCKER_INFLUXDB_INIT_BUCKET}
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
+      - DOCKER_INFLUXDB_INIT_ORG=iot-org
+      - DOCKER_INFLUXDB_INIT_BUCKET=plc_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
     healthcheck:
-      test: ["CMD", "influx", "ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,8 +68,9 @@ services:
     restart: unless-stopped
     networks:
       - iot-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2:ro
+    command: python core/main.py
     environment:
       - MODBUS_HOST=${MODBUS_HOST}
       - MODBUS_PORT=${MODBUS_PORT}
@@ -75,12 +78,12 @@ services:
       - MODBUS_START_ADDRESS=${MODBUS_START_ADDRESS}
       - MODBUS_REGISTER_COUNT=${MODBUS_REGISTER_COUNT}
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS}
-      - INFLUXDB_URL=${INFLUXDB_URL}
-      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
-      - INFLUXDB_ORG=${INFLUXDB_ORG}
-      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
       - BATCH_FLUSH_INTERVAL_SEC=${BATCH_FLUSH_INTERVAL_SEC}
       - BATCH_SIZE=${BATCH_SIZE}
+      - INFLUXDB_URL=${INFLUXDB_URL}
+      - INFLUXDB_ORG=${INFLUXDB_ORG}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - INFLUXDB_TOKEN_FILE=/var/lib/influxdb2/token.txt
     depends_on:
       influxdb:
         condition: service_healthy
@@ -98,12 +101,13 @@ services:
       - "8080:8080"
     volumes:
       - recordings-data:/app/recordings
+      - influxdb-data:/var/lib/influxdb2:ro
     command: gunicorn --chdir /app/core --bind 0.0.0.0:8080 --workers 2 --threads 4 web_ui:app
     environment:
       - INFLUXDB_URL=${INFLUXDB_URL}
-      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
       - INFLUXDB_ORG=${INFLUXDB_ORG}
       - INFLUXDB_BUCKET=${INFLUXDB_BUCKET}
+      - INFLUXDB_TOKEN_FILE=/var/lib/influxdb2/token.txt
       - MODBUS_START_ADDRESS=${MODBUS_START_ADDRESS}
       - MODBUS_REGISTER_COUNT=${MODBUS_REGISTER_COUNT}
     depends_on:

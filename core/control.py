@@ -11,7 +11,11 @@ load_dotenv()
 
 # ── InfluxDB config ───────────────────────────────────────────────────────────
 INFLUXDB_URL = os.getenv("INFLUXDB_URL", "http://influxdb:8086")
-INFLUXDB_TOKEN = os.getenv("INFLUXDB_TOKEN", "my-super-secret-token")
+INFLUXDB_TOKEN = os.getenv("INFLUXDB_TOKEN") or os.getenv("INFLUXDB_TOKEN_FILE")
+if INFLUXDB_TOKEN and INFLUXDB_TOKEN.startswith("/"):
+    # Read token from file
+    with open(INFLUXDB_TOKEN, "r") as f:
+        INFLUXDB_TOKEN = f.read().strip()
 INFLUXDB_ORG = os.getenv("INFLUXDB_ORG", "iot-org")
 INFLUXDB_BUCKET = os.getenv("INFLUXDB_BUCKET", "plc_data")
 
